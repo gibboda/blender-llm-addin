@@ -171,4 +171,5 @@ def gen_code(option, instruct_cmd, user_prompt):
 			print(output)
 			pass
 
-register()
+if __name__ == "__main__":
+	register()

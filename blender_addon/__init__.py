@@ -1,7 +1,7 @@
 bl_info = {
     "name": "BlenderLLMAddin",
     "description": "A utility add-on for Blender that performs specific tasks using LLM.",
-    "author": "Your Name",
+    "author": "Taewook Kang",
     "version": (1, 0),
     "blender": (5, 0, 0),
     "location": "View3D > Tool Shelf > LLM Add-in",

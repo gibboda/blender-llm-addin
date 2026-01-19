@@ -9,7 +9,7 @@ bl_info = {
 }
 
 import bpy
-import blender_llm_addin
+from .. import blender_llm_addin
 
 
 def register():

@@ -11,18 +11,7 @@ bl_info = {
 }
 
 # Import the main logic
-from .blender_llm_addin import register, unregister  # Assuming the script defines these
-
-# If the original script doesn't have register/unregister, add minimal ones:
-# (paste this if needed - adjust if script already has them)
-import bpy
-
-def register():
-    # Call whatever registration the original does (e.g. panel, props)
-    bpy.utils.register_class(YourPanelClass)  # Replace with actual from original script
-
-def unregister():
-    bpy.utils.unregister_class(YourPanelClass)
+from .blender_llm_addin import register, unregister
 
 if __name__ == "__main__":
     register()

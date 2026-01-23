@@ -4,8 +4,47 @@
 # authors: Taewook Kang
 # email: laputa99999@gmail.com
 # description: this is a Blender AI LLM Addin for generating Blender Python code using AI models like ChatGPT, Gemma, Llama, etc.
-import sys, os, json, argparse, re, textwrap, ast, subprocess, sys, random, math
-import bpy, pandas as pd, numpy as np
+import os, re, textwrap, ast
+import bpy
+
+# Determine the addon ID so that it always matches the module name Blender uses.
+# Prefer __package__ (set when loaded as an addon), otherwise fall back to the
+# filename stem instead of "__main__" to keep preferences registration consistent.
+ADDON_ID = __package__ or os.path.splitext(os.path.basename(__file__))[0]
+
+
+def get_addon_prefs():
+	try:
+		preferences = bpy.context.preferences
+	except AttributeError:
+		return None
+	if not preferences:
+		return None
+	addon = preferences.addons.get(ADDON_ID)
+	if not addon:
+		return None
+	return addon.preferences
+
+
+class LLMAddonPreferences(bpy.types.AddonPreferences):
+	bl_idname = ADDON_ID
+
+	openai_api_key: bpy.props.StringProperty(
+		name="OpenAI API Key",
+		subtype='PASSWORD',
+		description="Your OpenAI API key (stored unencrypted in Blender preferences)",
+	)
+	openai_model: bpy.props.StringProperty(
+		name="OpenAI Model",
+		default="gpt-4o",
+	)
+
+	def draw(self, context):
+		layout = self.layout
+		layout.label(text="OpenAI Settings")
+		layout.label(text="Warning: API key is stored unencrypted on disk", icon='ERROR')
+		layout.prop(self, "openai_api_key")
+		layout.prop(self, "openai_model")
 
 # Create Blender UI
 class OBJECT_PT_CustomPanel(bpy.types.Panel):
@@ -13,7 +52,7 @@ class OBJECT_PT_CustomPanel(bpy.types.Panel):
 	bl_idname = "OBJECT_PT_custom_panel"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = "Gen AI 3D Graphics Model"
+	bl_category = "LLM"
 
 	def draw(self, context):
 		layout = self.layout
@@ -31,15 +70,44 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 	def execute(self, context):
 		option = context.scene.ai_model
 		user_prompt = context.scene.user_prompt
-		gen_code(option, 'coding Blender python program using bpy, basic grammar without Explanation, "#" inline comments, complicated grammar like lamda and function under user request. do not delete the previous objects. user request is', user_prompt)
-		# make box, position (6,-3) with yellow color
-		# Create 100 cubes. The y position of each cube follows the cosine function along the x-axis with random color, size.
-		# Generate 50 cubes which have positions on each x, y axis on grid style and each cube has random color, size.
+		if not user_prompt.strip():
+			self.report({'ERROR'}, "Please enter a prompt before submitting.")
+			return {'CANCELLED'}
+		if option == 'chatgpt':
+			prefs = get_addon_prefs()
+			if not prefs or not getattr(prefs, "openai_api_key", "").strip():
+				self.report({'ERROR'}, "OpenAI API key is missing. Set it in Add-on Preferences.")
+				return {'CANCELLED'}
+		# Basic validation for non-ChatGPT model types that may require an Ollama server URL.
+		# This avoids obvious misconfiguration before attempting to call gen_code and
+		# automatically applies to any future non-ChatGPT models without needing to update a hardcoded list.
+		elif option and option != 'chatgpt':
+			ollama_host = os.getenv("OLLAMA_HOST")
+			if not ollama_host:
+				self.report(
+					{'WARNING'},
+					"Ollama server URL not set. If connection fails, set the OLLAMA_HOST environment variable."
+				)
+		try:
+			success = gen_code(
+				option,
+				'coding Blender python program using bpy, basic grammar without Explanation, "#" inline comments, complicated grammar like lambda and function under user request. do not delete the previous objects. user request is',
+				user_prompt,
+			)
+		except Exception as exc:
+			# Handle unexpected failures from gen_code gracefully instead of raising unhandled exceptions.
+			print(f"[LLM Addon] gen_code failed for model '{option}': {exc}")
+			success = False
+		if success:
+			self.report({'INFO'}, "Prompt executed successfully.")
+		else:
+			self.report({'ERROR'}, "Prompt execution failed. Check the system console for details.")
 
-		return {'FINISHED'}
+		return {'FINISHED' if success else 'CANCELLED'}
 
 # Blender widget registration
 def register():
+	bpy.utils.register_class(LLMAddonPreferences)
 	bpy.utils.register_class(OBJECT_PT_CustomPanel)
 	bpy.utils.register_class(OBJECT_OT_SubmitPrompt)
 
@@ -50,15 +118,16 @@ def register():
 				('gemma2', "Gemma", ""),
 				('llama3.2', "llama", ""),
 				('codellama', "codellama", ""),
-				('qwen2.5-coder:3b', "qwen2.5", ""),			   
+				('qwen2.5-coder:3b', "qwen2.5", ""),
 				('vanilj/Phi-4', "Phi", ""),
 			]
 	)
 	bpy.types.Scene.user_prompt = bpy.props.StringProperty(name="User Prompt")
 
 def unregister():
-	bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
 	bpy.utils.unregister_class(OBJECT_OT_SubmitPrompt)
+	bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
+	bpy.utils.unregister_class(LLMAddonPreferences)
 
 	del bpy.types.Scene.ai_model
 	del bpy.types.Scene.user_prompt
@@ -70,20 +139,26 @@ from ollama import ChatResponse
 from openai import OpenAI
 
 # OpenAI model
-client = OpenAI(api_key='<input your OpenAI API key>')
-
-def openai_agent(prompt, system_prompt="You are coder for Blender python program", model="gpt-4o"):
+def openai_agent(prompt, system_prompt="You are coder for Blender python program", model=None, api_key=None):
+	prefs = get_addon_prefs()
+	if prefs is None and (model is None or api_key is None):
+		raise ValueError("OpenAI API key and model are not configured, and preferences are unavailable.")
+	resolved_model = model or (prefs.openai_model if prefs else "gpt-4o")
+	resolved_api_key = api_key or (prefs.openai_api_key if prefs else None)
+	if not resolved_api_key:
+		raise ValueError("OpenAI API key is not configured.")
+	client = OpenAI(api_key=resolved_api_key)
 	response = client.chat.completions.create(
-		model="gpt-4o",
+		model=resolved_model,
 		messages=[
 			{
 				"role": "system",
-				"content": system_prompt
+				"content": system_prompt,
 			},
 			{
-			"role": "user",
-			"content": prompt
-			}
+				"role": "user",
+				"content": prompt,
+			},
 		],
 		temperature=0.1,
 		max_tokens=1024,
@@ -149,27 +224,44 @@ def gen_code(option, instruct_cmd, user_prompt):
 
 	print(f'Calling {option} API...')
 	output = ''
-	if option == 'chatgpt':
-		output = openai_agent(instruct_cmd + ': ' + user_prompt)
-	else:
-		output = llm_agent(option, instruct_cmd + ': ' + user_prompt)
-	print(output)
+	try:
+		if option == 'chatgpt':
+			output = openai_agent(instruct_cmd + ': ' + user_prompt)
+		else:
+			output = llm_agent(option, instruct_cmd + ': ' + user_prompt)
+		print(output)
+	except Exception as api_error:
+		print(f"API call failed: {api_error}")
+		return False
 
 	for i in range(3):
 		try:
+			# Ensure the model actually returned something before preprocessing.
+			if not output or not str(output).strip():
+				raise ValueError("Model output is empty; cannot extract code.")
 			code = preprocess_code(output)
+			# Distinguish preprocessing failures from genuinely empty model output.
+			if not code.strip():
+				raise ValueError("Failed to extract code from non-empty model output; preprocessing returned empty code.")
 			exec(code)
 			print("Code executed successfully.")
-			break
+			return True
 		except Exception as e:
 			print(f"Error: {e}")
 			error_fix_prompt = f"Fix the error {e} in {code}"
-			if option == 'chatgpt':
-				output = openai_agent(error_fix_prompt)
-			else:
-				output = llm_agent(option, error_fix_prompt)
-			print(output)
-			pass
+			try:
+				if option == 'chatgpt':
+					output = openai_agent(error_fix_prompt)
+				else:
+					output = llm_agent(option, error_fix_prompt)
+				print(output)
+			except ValueError as ve:
+				print(f"API key configuration error during error recovery: {ve}. Please verify your API key settings in the add-on preferences.")
+				break
+			except Exception as recovery_error:
+				print(f"Error during recovery attempt: {recovery_error}")
+				break
+	return False
 
 if __name__ == "__main__":
 	register()

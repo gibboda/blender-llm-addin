@@ -78,9 +78,10 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 			if not prefs or not getattr(prefs, "openai_api_key", "").strip():
 				self.report({'ERROR'}, "OpenAI API key is missing. Set it in Add-on Preferences.")
 				return {'CANCELLED'}
-		# Basic validation for other known model types that may require an Ollama server URL.
-		# This avoids obvious misconfiguration before attempting to call gen_code.
-		elif option in {'gemma2', 'llama3.2', 'codellama', 'qwen2.5-coder:3b', 'vanilj/Phi-4'}:
+		# Basic validation for non-ChatGPT model types that may require an Ollama server URL.
+		# This avoids obvious misconfiguration before attempting to call gen_code and
+		# automatically applies to any future non-ChatGPT models without needing to update a hardcoded list.
+		elif option and option != 'chatgpt':
 			ollama_host = os.getenv("OLLAMA_HOST")
 			if not ollama_host:
 				self.report(

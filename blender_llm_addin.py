@@ -155,12 +155,12 @@ def openai_agent(prompt, system_prompt="You are coder for Blender python program
 		messages=[
 			{
 				"role": "system",
-				"content": system_prompt
+				"content": system_prompt,
 			},
 			{
-			"role": "user",
-			"content": prompt
-			}
+				"role": "user",
+				"content": prompt,
+			},
 		],
 		temperature=0.1,
 		max_tokens=1024,

@@ -259,7 +259,7 @@ def gen_code(option, instruct_cmd, user_prompt):
 					output = llm_agent(option, error_fix_prompt)
 				print(output)
 			except ValueError as ve:
-				print(f"ValueError during error recovery: {ve}")
+				print(f"API key configuration error during error recovery: {ve}. Please verify your API key settings in the add-on preferences.")
 				break
 			except Exception as recovery_error:
 				print(f"Error during recovery attempt: {recovery_error}")

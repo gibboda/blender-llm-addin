@@ -239,7 +239,7 @@ def gen_code(option, instruct_cmd, user_prompt):
 	for i in range(3):
 		try:
 			code = preprocess_code(output)
-			if not code:
+			if not code.strip():
 				raise ValueError("Empty code extracted from model output")
 			exec(code)
 			print("Code executed successfully.")

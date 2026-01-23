@@ -102,9 +102,6 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 			self.report({'INFO'}, "Prompt executed successfully.")
 		else:
 			self.report({'ERROR'}, "Prompt execution failed. Check the system console for details.")
-		# make box, position (6,-3) with yellow color
-		# Create 100 cubes. The y position of each cube follows the cosine function along the x-axis with random color, size.
-		# Generate 50 cubes which have positions on each x, y axis on grid style and each cube has random color, size.
 
 		return {'FINISHED' if success else 'CANCELLED'}
 

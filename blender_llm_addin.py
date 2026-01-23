@@ -120,7 +120,7 @@ def register():
 				('gemma2', "Gemma", ""),
 				('llama3.2', "llama", ""),
 				('codellama', "codellama", ""),
-				('qwen2.5-coder:3b', "qwen2.5", ""),			   
+				('qwen2.5-coder:3b', "qwen2.5", ""),
 				('vanilj/Phi-4', "Phi", ""),
 			]
 	)

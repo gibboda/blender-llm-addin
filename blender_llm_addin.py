@@ -238,9 +238,13 @@ def gen_code(option, instruct_cmd, user_prompt):
 
 	for i in range(3):
 		try:
+			# Ensure the model actually returned something before preprocessing.
+			if not output or not str(output).strip():
+				raise ValueError("Model output is empty; cannot extract code.")
 			code = preprocess_code(output)
+			# Distinguish preprocessing failures from genuinely empty model output.
 			if not code.strip():
-				raise ValueError("Empty code extracted from model output")
+				raise ValueError("Failed to extract code from non-empty model output; preprocessing returned empty code.")
 			exec(code)
 			print("Code executed successfully.")
 			return True

@@ -40,7 +40,7 @@ cd blender-llm-addin
 ```
 
 ### Setting Up API Keys
-For OpenAI GPT integration, replace `<input your OpenAI API key>` in the script with your OpenAI API key.
+For OpenAI GPT integration, set your OpenAI API key in the add-on preferences (Edit > Preferences > Add-ons > LLM Add-in).
 
 ## Usage
 1. Open Blender and go to the **Scripting** editor.

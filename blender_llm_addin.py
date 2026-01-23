@@ -7,13 +7,47 @@
 import sys, os, json, argparse, re, textwrap, ast, subprocess, sys, random, math
 import bpy, pandas as pd, numpy as np
 
+ADDON_ID = __package__ or __name__
+
+
+def get_addon_prefs():
+	try:
+		preferences = bpy.context.preferences
+	except AttributeError:
+		return None
+	if not preferences:
+		return None
+	addon = preferences.addons.get(ADDON_ID)
+	if not addon:
+		return None
+	return addon.preferences
+
+
+class LLMAddonPreferences(bpy.types.AddonPreferences):
+	bl_idname = ADDON_ID
+
+	openai_api_key: bpy.props.StringProperty(
+		name="OpenAI API Key",
+		subtype='PASSWORD',
+	)
+	openai_model: bpy.props.StringProperty(
+		name="OpenAI Model",
+		default="gpt-4o",
+	)
+
+	def draw(self, context):
+		layout = self.layout
+		layout.label(text="OpenAI Settings")
+		layout.prop(self, "openai_api_key")
+		layout.prop(self, "openai_model")
+
 # Create Blender UI
 class OBJECT_PT_CustomPanel(bpy.types.Panel):
 	bl_label = "AI Model Selector"
 	bl_idname = "OBJECT_PT_custom_panel"
 	bl_space_type = 'VIEW_3D'
 	bl_region_type = 'UI'
-	bl_category = "Gen AI 3D Graphics Model"
+	bl_category = "LLM"
 
 	def draw(self, context):
 		layout = self.layout
@@ -31,15 +65,32 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 	def execute(self, context):
 		option = context.scene.ai_model
 		user_prompt = context.scene.user_prompt
-		gen_code(option, 'coding Blender python program using bpy, basic grammar without Explanation, "#" inline comments, complicated grammar like lamda and function under user request. do not delete the previous objects. user request is', user_prompt)
+		if not user_prompt.strip():
+			self.report({'ERROR'}, "Please enter a prompt before submitting.")
+			return {'CANCELLED'}
+		if option == 'chatgpt':
+			prefs = get_addon_prefs()
+			if not prefs or not prefs.openai_api_key:
+				self.report({'ERROR'}, "OpenAI API key is missing. Set it in Add-on Preferences.")
+				return {'CANCELLED'}
+		success = gen_code(
+			option,
+			'coding Blender python program using bpy, basic grammar without Explanation, "#" inline comments, complicated grammar like lamda and function under user request. do not delete the previous objects. user request is',
+			user_prompt,
+		)
+		if success:
+			self.report({'INFO'}, "Prompt executed successfully.")
+		else:
+			self.report({'ERROR'}, "Prompt execution failed. Check the system console for details.")
 		# make box, position (6,-3) with yellow color
 		# Create 100 cubes. The y position of each cube follows the cosine function along the x-axis with random color, size.
 		# Generate 50 cubes which have positions on each x, y axis on grid style and each cube has random color, size.
 
-		return {'FINISHED'}
+		return {'FINISHED' if success else 'CANCELLED'}
 
 # Blender widget registration
 def register():
+	bpy.utils.register_class(LLMAddonPreferences)
 	bpy.utils.register_class(OBJECT_PT_CustomPanel)
 	bpy.utils.register_class(OBJECT_OT_SubmitPrompt)
 
@@ -57,6 +108,7 @@ def register():
 	bpy.types.Scene.user_prompt = bpy.props.StringProperty(name="User Prompt")
 
 def unregister():
+	bpy.utils.unregister_class(LLMAddonPreferences)
 	bpy.utils.unregister_class(OBJECT_PT_CustomPanel)
 	bpy.utils.unregister_class(OBJECT_OT_SubmitPrompt)
 
@@ -70,11 +122,15 @@ from ollama import ChatResponse
 from openai import OpenAI
 
 # OpenAI model
-client = OpenAI(api_key='<input your OpenAI API key>')
-
-def openai_agent(prompt, system_prompt="You are coder for Blender python program", model="gpt-4o"):
+def openai_agent(prompt, system_prompt="You are coder for Blender python program", model=None, api_key=None):
+	prefs = get_addon_prefs()
+	resolved_model = model or (prefs.openai_model if prefs else "gpt-4o")
+	resolved_api_key = api_key or (prefs.openai_api_key if prefs else None)
+	if not resolved_api_key:
+		raise ValueError("OpenAI API key is not configured.")
+	client = OpenAI(api_key=resolved_api_key)
 	response = client.chat.completions.create(
-		model="gpt-4o",
+		model=resolved_model,
 		messages=[
 			{
 				"role": "system",
@@ -160,7 +216,7 @@ def gen_code(option, instruct_cmd, user_prompt):
 			code = preprocess_code(output)
 			exec(code)
 			print("Code executed successfully.")
-			break
+			return True
 		except Exception as e:
 			print(f"Error: {e}")
 			error_fix_prompt = f"Fix the error {e} in {code}"
@@ -170,6 +226,7 @@ def gen_code(option, instruct_cmd, user_prompt):
 				output = llm_agent(option, error_fix_prompt)
 			print(output)
 			pass
+	return False
 
 if __name__ == "__main__":
 	register()

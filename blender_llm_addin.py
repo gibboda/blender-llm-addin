@@ -40,7 +40,7 @@ def get_openai_api_key(prefs):
 			stored_key = keyring.get_password(KEYRING_SERVICE, "api_key")
 			if stored_key:
 				return stored_key
-		except Exception as exc:
+		except keyring.errors.KeyringError as exc:
 			print(f"[LLM Addon] Failed to read API key from keyring: {exc}")
 	if prefs:
 		pref_key = (prefs.openai_api_key or "").strip()

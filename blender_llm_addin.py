@@ -15,6 +15,7 @@ KEYRING_SERVICE = f"{ADDON_ID}.openai"
 
 try:
 	import keyring
+	import keyring.errors
 	KEYRING_AVAILABLE = True
 except Exception:
 	keyring = None
@@ -63,6 +64,40 @@ class LLMAddonPreferences(bpy.types.AddonPreferences):
 				existing_key = keyring.get_password(KEYRING_SERVICE, "api_key")
 				if existing_key:
 					keyring.delete_password(KEYRING_SERVICE, "api_key")
+			except Exception as exc:
+				print(f"[LLM Addon] Failed to delete API key from keyring: {exc}")
+			return
+		try:
+			keyring.set_password(KEYRING_SERVICE, "api_key", api_key)
+		except Exception as exc:
+			print(f"[LLM Addon] Failed to store API key in keyring: {exc}")
+
+	openai_api_key: bpy.props.StringProperty(
+		name="OpenAI API Key",
+		subtype='PASSWORD',
+		description="Your OpenAI API key (stored in the system keyring when available)",
+		options={'SKIP_SAVE'},
+		update=_store_openai_api_key,
+	)
+	openai_model: bpy.props.StringProperty(
+		name="OpenAI Model",
+		default="gpt-4o",
+	)
+
+	def _store_openai_api_key(self, context):
+		if not KEYRING_AVAILABLE:
+			return
+		api_key = (self.openai_api_key or "").strip()
+		if not api_key:
+			# Clearing the field should remove any previously stored key from the keyring.
+			try:
+				keyring.delete_password(KEYRING_SERVICE, "api_key")
+			except keyring.errors.PasswordDeleteError:
+				# It's not an error if there was no stored password to delete.
+				return
+			except keyring.errors.PasswordDeleteError:
+				# It's not an error if there was no stored password to delete.
+				pass
 			except Exception as exc:
 				print(f"[LLM Addon] Failed to delete API key from keyring: {exc}")
 			return

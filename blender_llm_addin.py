@@ -63,6 +63,9 @@ class LLMAddonPreferences(bpy.types.AddonPreferences):
 				keyring.delete_password(KEYRING_SERVICE, "api_key")
 			except keyring.errors.PasswordDeleteError:
 				# It's not an error if there was no stored password to delete.
+				return
+			except keyring.errors.PasswordDeleteError:
+				# It's not an error if there was no stored password to delete.
 				pass
 			except Exception as exc:
 				print(f"[LLM Addon] Failed to delete API key from keyring: {exc}")

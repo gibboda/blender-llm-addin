@@ -42,8 +42,11 @@ def get_openai_api_key(prefs):
 		except Exception as exc:
 			print(f"[LLM Addon] Failed to read API key from keyring: {exc}")
 	if prefs:
-		return (prefs.openai_api_key or "").strip() or None
-	return os.getenv("OPENAI_API_KEY")
+		pref_key = (prefs.openai_api_key or "").strip()
+		if pref_key:
+			return pref_key
+	env_key = os.getenv("OPENAI_API_KEY")
+	return (env_key or "").strip() or None
 
 
 class LLMAddonPreferences(bpy.types.AddonPreferences):
@@ -54,6 +57,11 @@ class LLMAddonPreferences(bpy.types.AddonPreferences):
 			return
 		api_key = (self.openai_api_key or "").strip()
 		if not api_key:
+			# Clearing the field should remove any previously stored key from the keyring.
+			try:
+				keyring.delete_password(KEYRING_SERVICE, "api_key")
+			except Exception as exc:
+				print(f"[LLM Addon] Failed to delete API key from keyring: {exc}")
 			return
 		try:
 			keyring.set_password(KEYRING_SERVICE, "api_key", api_key)

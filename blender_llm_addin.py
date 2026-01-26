@@ -11,6 +11,15 @@ import bpy
 # Prefer __package__ (set when loaded as an addon), otherwise fall back to the
 # filename stem instead of "__main__" to keep preferences registration consistent.
 ADDON_ID = __package__ or os.path.splitext(os.path.basename(__file__))[0]
+KEYRING_SERVICE = f"{ADDON_ID}.openai"
+
+try:
+	import keyring
+	import keyring.errors
+	KEYRING_AVAILABLE = True
+except Exception:
+	keyring = None
+	KEYRING_AVAILABLE = False
 
 
 def get_addon_prefs():
@@ -25,14 +34,51 @@ def get_addon_prefs():
 		return None
 	return addon.preferences
 
+def get_openai_api_key(prefs):
+	if prefs and KEYRING_AVAILABLE:
+		try:
+			stored_key = keyring.get_password(KEYRING_SERVICE, "api_key")
+			if stored_key:
+				return stored_key
+		except keyring.errors.KeyringError as exc:
+			print(f"[LLM Addon] Failed to read API key from keyring: {exc}")
+	if prefs:
+		pref_key = (prefs.openai_api_key or "").strip()
+		if pref_key:
+			return pref_key
+	env_key = os.getenv("OPENAI_API_KEY")
+	return (env_key or "").strip() or None
+
 
 class LLMAddonPreferences(bpy.types.AddonPreferences):
 	bl_idname = ADDON_ID
 
+	def _store_openai_api_key(self, context):
+		if not KEYRING_AVAILABLE:
+			return
+		api_key = (self.openai_api_key or "").strip()
+		if not api_key:
+			# Clearing the field should remove any previously stored key from the keyring.
+			try:
+				# Directly attempt deletion; ignore if the key does not exist.
+				keyring.delete_password(KEYRING_SERVICE, "api_key")
+			except keyring.errors.PasswordDeleteError:
+				# No stored key to delete; this is not an error condition.
+				pass
+			except keyring.errors.KeyringError as exc:
+				print(f"[LLM Addon] Failed to delete API key from keyring: {exc}")
+			return
+		try:
+			keyring.set_password(KEYRING_SERVICE, "api_key", api_key)
+		except keyring.errors.KeyringError as exc:
+			print(f"[LLM Addon] Failed to store API key in keyring: {exc}")
+
 	openai_api_key: bpy.props.StringProperty(
 		name="OpenAI API Key",
 		subtype='PASSWORD',
-		description="Your OpenAI API key (stored unencrypted in Blender preferences)",
+		description="Your OpenAI API key (stored in the system keyring when available)",
+		options={'SKIP_SAVE'},
+		update=_store_openai_api_key,
 	)
 	openai_model: bpy.props.StringProperty(
 		name="OpenAI Model",
@@ -42,7 +88,13 @@ class LLMAddonPreferences(bpy.types.AddonPreferences):
 	def draw(self, context):
 		layout = self.layout
 		layout.label(text="OpenAI Settings")
-		layout.label(text="Warning: API key is stored unencrypted on disk", icon='ERROR')
+		if KEYRING_AVAILABLE:
+			layout.label(text="API key is stored in the system keyring", icon='INFO')
+		else:
+			layout.label(
+				text="Keyring unavailable; API key will not be saved. Set OPENAI_API_KEY env var instead.",
+				icon='ERROR',
+			)
 		layout.prop(self, "openai_api_key")
 		layout.prop(self, "openai_model")
 
@@ -144,7 +196,7 @@ def openai_agent(prompt, system_prompt="You are coder for Blender python program
 	if prefs is None and (model is None or api_key is None):
 		raise ValueError("OpenAI API key and model are not configured, and preferences are unavailable.")
 	resolved_model = model or (prefs.openai_model if prefs else "gpt-4o")
-	resolved_api_key = api_key or (prefs.openai_api_key if prefs else None)
+	resolved_api_key = api_key or get_openai_api_key(prefs)
 	if not resolved_api_key:
 		raise ValueError("OpenAI API key is not configured.")
 	client = OpenAI(api_key=resolved_api_key)

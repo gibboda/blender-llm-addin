@@ -40,7 +40,7 @@ cd blender-llm-addin
 ```
 
 ### Setting Up API Keys
-For OpenAI GPT integration, set your OpenAI API key in the add-on preferences (Edit > Preferences > Add-ons > LLM Add-in).
+For OpenAI GPT integration, set your OpenAI API key in the add-on preferences (Edit > Preferences > Add-ons > LLM Add-in). When the `keyring` Python package is available, the add-on stores the key in your system keychain; otherwise, set the `OPENAI_API_KEY` environment variable to avoid persisting the key on disk.
 
 ## Usage
 1. Open Blender and go to the **Scripting** editor.

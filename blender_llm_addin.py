@@ -127,8 +127,11 @@ class OBJECT_OT_SubmitPrompt(bpy.types.Operator):
 			return {'CANCELLED'}
 		if option == 'chatgpt':
 			prefs = get_addon_prefs()
-			if not prefs or not getattr(prefs, "openai_api_key", "").strip():
-				self.report({'ERROR'}, "OpenAI API key is missing. Set it in Add-on Preferences.")
+			if not get_openai_api_key(prefs):
+				self.report(
+					{'ERROR'},
+					"OpenAI API key is missing. Set it in Add-on Preferences or set OPENAI_API_KEY."
+				)
 				return {'CANCELLED'}
 		# Basic validation for non-ChatGPT model types that may require an Ollama server URL.
 		# This avoids obvious misconfiguration before attempting to call gen_code and
